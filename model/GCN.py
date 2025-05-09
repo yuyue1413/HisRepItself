@@ -43,8 +43,8 @@ class GraphConvolution(nn.Module):
 
     def __repr__(self):
         return self.__class__.__name__ + ' (' \
-               + str(self.in_features) + ' -> ' \
-               + str(self.out_features) + ')'
+            + str(self.in_features) + ' -> ' \
+            + str(self.out_features) + ')'
 
 
 class GC_Block(nn.Module):
@@ -82,8 +82,8 @@ class GC_Block(nn.Module):
 
     def __repr__(self):
         return self.__class__.__name__ + ' (' \
-               + str(self.in_features) + ' -> ' \
-               + str(self.out_features) + ')'
+            + str(self.in_features) + ' -> ' \
+            + str(self.out_features) + ')'
 
 
 class GCN(nn.Module):
@@ -98,7 +98,11 @@ class GCN(nn.Module):
         super(GCN, self).__init__()
         self.num_stage = num_stage
 
-        self.gc1 = GraphConvolution(input_feature, hidden_feature, node_n=node_n)
+        # 添加一个适配层，用于处理增加的空间注意力特征
+        # 原始输入特征 + 时间注意力特征 + 空间注意力特征
+        self.input_adapter = nn.Linear(input_feature, hidden_feature)
+
+        self.gc1 = GraphConvolution(hidden_feature, hidden_feature, node_n=node_n)
         self.bn1 = nn.BatchNorm1d(node_n * hidden_feature)
 
         self.gcbs = []
@@ -113,7 +117,10 @@ class GCN(nn.Module):
         self.act_f = nn.Tanh()
 
     def forward(self, x, is_out_resi=True):
-        y = self.gc1(x)
+        # 首先通过适配层调整输入维度
+        x_adapted = self.input_adapter(x)
+
+        y = self.gc1(x_adapted)
         b, n, f = y.shape
         y = self.bn1(y.view(b, -1)).view(b, n, f)
         y = self.act_f(y)
@@ -124,5 +131,6 @@ class GCN(nn.Module):
 
         y = self.gc7(y)
         if is_out_resi:
-            y = y + x
+            # 由于维度已经通过适配层调整，这里直接使用残差连接
+            y = y + x[:, :, :y.size(2)]
         return y
